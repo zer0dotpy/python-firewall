@@ -3,124 +3,139 @@ from scapy.layers.inet import IP, TCP, UDP
 import os
 from datetime import datetime
 
-LOG_DOSYA_YOLU = ""
+LOG_FILE_PATH = ""
 
-def paket_renklendir(pkt, engelli=False):
-    if engelli:
-        return '\033[91m' + str(pkt.summary()) + '\033[0m' 
+# Terminalde şekil ve renk desteği
+def print_boxed_text(text, width=60):
+    print(f"\n+{'-' * width}+")
+    print(f"| {text:^{width - 2}} |")
+    print(f"+{'-' * width}+\n")
+
+def print_table_row(columns, widths):
+    row = "|"
+    for i, column in enumerate(columns):
+        row += f" {str(column):<{widths[i]}} |"
+    print(row)
+
+def color_packet(pkt, blocked=False):
+    """Colorizes the packet summary based on its type."""
+    if blocked:
+        return '\033[91m' + str(pkt.summary()) + '\033[0m'  # Red for blocked
     elif TCP in pkt:
-        return '\033[94m' + str(pkt.summary()) + '\033[0m' 
+        return '\033[94m' + str(pkt.summary()) + '\033[0m'  # Blue for TCP
     elif UDP in pkt:
         if DHCP in pkt:
-            return '\033[95m' + str(pkt.summary()) + '\033[0m'  
-        return '\033[92m' + str(pkt.summary()) + '\033[0m'  
+            return '\033[95m' + str(pkt.summary()) + '\033[0m'  # Magenta for DHCP
+        return '\033[92m' + str(pkt.summary()) + '\033[0m'  # Green for UDP
     else:
-        return '\033[91m' + str(pkt.summary()) + '\033[0m'  
+        return '\033[93m' + str(pkt.summary()) + '\033[0m'  # Yellow for others
 
-def dhcp_analiz(pkt):
+def analyze_dhcp(pkt):
     if DHCP in pkt:
-        detaylar = "\nDHCP Paket Detayları:\n"
-        dhcp_opsiyonlar = pkt[DHCP].options
-        for opt in dhcp_opsiyonlar:
+        dhcp_details = "DHCP Packet Details:\n"
+        dhcp_options = pkt[DHCP].options
+        for opt in dhcp_options:
             if isinstance(opt, tuple):
-                detaylar += f"{opt[0]}: {opt[1]}\n"
+                dhcp_details += f"{opt[0]}: {opt[1]}\n"
             else:
-                detaylar += f"{opt}\n"
-        print(detaylar)
-        return detaylar
+                dhcp_details += f"{opt}\n"
+        print_boxed_text(dhcp_details)
+        return dhcp_details
 
-def log_kaydet(islem, sebep, pkt, paket_turu, port):
-    zaman = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    port_adi = "Bilinmiyor"
-    if paket_turu == 'TCP':
-        port_adi = "TCP Port"
-    elif paket_turu == 'UDP':
-        port_adi = "UDP Port"
-    elif paket_turu == 'DHCP':
-        port_adi = "DHCP"
-    log_kaydi = f"{zaman} - {islem} - {sebep} - Engellenen Paket: {pkt.summary()} - Paket Türü: {paket_turu} - Port: {port} - Port Adı: {port_adi}\n"
-    with open(LOG_DOSYA_YOLU, "a") as log_dosyasi:
-        log_dosyasi.write(log_kaydi)
+def log_action(action, reason, pkt, packet_type, port):
+    """Logs the actions taken on packets inside a log file."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    port_name = "Unknown"
+    if packet_type == 'TCP':
+        port_name = "TCP Port"
+    elif packet_type == 'UDP':
+        port_name = "UDP Port"
+    elif packet_type == 'DHCP':
+        port_name = "DHCP"
 
-def paket_yakala(pkt):
-    protokol = None
+    log_entry = f"{timestamp} - {action} - {reason} - Blocked Packet: {pkt.summary()} - Packet Type: {packet_type} - Port: {port} - Port Name: {port_name}\n"
+    with open(LOG_FILE_PATH, "a") as log_file:
+        log_file.write(log_entry)
+
+def packet_handler(pkt):
+    protocol = None
     port = None
-    islem = None
-    sebep = None
+    action = None
+    reason = None
 
     if IP in pkt:
-        protokol = pkt[IP].proto
+        protocol = pkt[IP].proto
 
     if TCP in pkt:
         port = pkt[TCP].sport
-        protokol = 'TCP'
+        protocol = 'TCP'
     elif UDP in pkt:
         port = pkt[UDP].sport
-        protokol = 'UDP'
+        protocol = 'UDP'
         if DHCP in pkt:
-            protokol = 'DHCP'
+            protocol = 'DHCP'
 
-    tehdit_tcp_portlar = [21, 23, 25, 80, 110, 143, 443, 445, 3389]
-    tehdit_udp_portlar = [53, 67, 68, 137, 138, 139]
+    dangerous_tcp_ports = [21, 23, 25, 80, 110, 143, 443, 445, 3389]
+    dangerous_udp_ports = [53, 67, 68, 137, 138, 139]
 
-    if protokol == 'TCP' and port in tehdit_tcp_portlar:
-        islem = "Engellendi"
-        sebep = "Tehlikeli TCP portu"
+    if protocol == 'TCP' and port in dangerous_tcp_ports:
+        action = "Blocked"
+        reason = "Dangerous TCP port"
         os.system(f"sudo iptables -A INPUT -p tcp --sport {port} -j DROP")
-        print(paket_renklendir(pkt, engelli=True))
-        print(f"Tehdit: {sebep}")
-    elif protokol == 'UDP' and port in tehdit_udp_portlar:
-        islem = "Engellendi"
-        sebep = "Tehlikeli UDP portu"
+        print_boxed_text(f"THREAT DETECTED: {reason}", width=60)
+        print(color_packet(pkt, blocked=True))
+    elif protocol == 'UDP' and port in dangerous_udp_ports:
+        action = "Blocked"
+        reason = "Dangerous UDP port"
         os.system(f"sudo iptables -A INPUT -p udp --sport {port} -j DROP")
-        print(paket_renklendir(pkt, engelli=True))
-        print(f"Tehdit: {sebep}")
-    elif protokol == 'DHCP':
-        islem = "Engellendi"
-        sebep = "Tehlikeli DHCP paketi"
-        dhcp_analiz(pkt)
+        print_boxed_text(f"THREAT DETECTED: {reason}", width=60)
+        print(color_packet(pkt, blocked=True))
+    elif protocol == 'DHCP':
+        action = "Blocked"
+        reason = "Dangerous DHCP packet"
+        analyze_dhcp(pkt)
         os.system("sudo iptables -A INPUT -p udp --dport 67 -j DROP")
-        print(paket_renklendir(pkt, engelli=True))
-        print(f"Tehdit: {sebep}")
+        print_boxed_text(f"THREAT DETECTED: {reason}", width=60)
+        print(color_packet(pkt, blocked=True))
 
-    if islem:
-        log_kaydet(islem, sebep, pkt, protokol, port)
+    if action:
+        log_action(action, reason, pkt, protocol, port)
     else:
-        print(paket_renklendir(pkt))
-        print(f"Protokol: {protokol}")
-        print(f"Port: {port}")
-        print(pkt.show(dump=True))
+        print_table_row(["Protocol", "Port", "Summary"], [10, 10, 40])
+        print_table_row([protocol, port, pkt.summary()], [10, 10, 40])
+        print(color_packet(pkt))
 
-def kullanici_girdisi():
-    global LOG_DOSYA_YOLU
+def get_user_input():
+    """Gets user input for the interface and log file path."""
+    global LOG_FILE_PATH
 
-    arayuzler = get_if_list()
-    print("Kullanmak istediğiniz ağ arayüzünü seçin:")
-    for i, arayuz in enumerate(arayuzler):
-        print(f"{i + 1}. {arayuz}")
+    interfaces = get_if_list()
+    print_boxed_text("SELECT NETWORK INTERFACE", width=60)
+    for i, interface in enumerate(interfaces):
+        print(f"{i + 1}. {interface}")
     
-    secilen_arayuz = int(input("Seçiminiz (sayı girin): ")) - 1
-    if secilen_arayuz < 0 or secilen_arayuz >= len(arayuzler):
-        print("Geçersiz seçim!")
+    selected_interface = int(input("\nEnter your selection (number): ")) - 1
+    if selected_interface < 0 or selected_interface >= len(interfaces):
+        print_boxed_text("INVALID SELECTION!", width=60)
         return None, None
 
-    arayuz = arayuzler[secilen_arayuz]
+    interface = interfaces[selected_interface]
 
-    LOG_DOSYA_YOLU = input("Log dosyasının kaydedileceği yolu girin (örn: /home/user/log.txt): ")
-    if not LOG_DOSYA_YOLU:
-        print("Geçersiz dosya yolu!")
+    LOG_FILE_PATH = input("Enter the log file path (e.g., /home/user/log.txt): ")
+    if not LOG_FILE_PATH:
+        print_boxed_text("INVALID FILE PATH!", width=60)
         return None, None
 
-    return arayuz, LOG_DOSYA_YOLU
+    return interface, LOG_FILE_PATH
 
 def main():
-    arayuz, log_dosyasi_yolu = kullanici_girdisi()
-    if arayuz and log_dosyasi_yolu:
-        print(f"{arayuz} arayüzünde dinleniyor...")
-        sniff(iface=arayuz, prn=paket_yakala, store=False)
+    print_boxed_text("SNIFF AND BLOCK", width=60)
+    interface, log_file_path = get_user_input()
+    if interface and log_file_path:
+        print_boxed_text(f"LISTENING ON {interface.upper()}...", width=60)
+        sniff(iface=interface, prn=packet_handler, store=False)
     else:
-        print("Program sonlandırıldı.")
+        print_boxed_text("PROGRAM TERMINATED.", width=60)
 
 if __name__ == "__main__":
     main()
-
