@@ -14,7 +14,7 @@ This project is a Python application that captures and analyzes specific network
 - **Tehlikeli Port Engelleme**: Belirlenen tehlikeli TCP ve UDP portlarından gelen paketler otomatik olarak engellenir.
 - **DHCP Paket Analizi**: DHCP paketleri detaylı bir şekilde analiz edilerek kullanıcıya sunulur.
 - **Log Kaydı**: Engellenen paketler ve nedenleri log dosyasına kaydedilir.
-**----------------------------------------------------------------------------------------------------**
+**########################################################################################################################**
 - **Network Interface Selection**: Users can select the network interface they want to listen to.
 - **Packet Color Coding**: Packets are displayed with color codes based on different protocols.
 - **Dangerous Port Blocking**: Packets coming from specified dangerous TCP and UDP ports are automatically blocked.
