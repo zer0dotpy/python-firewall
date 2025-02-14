@@ -75,7 +75,7 @@ def packet_handler(pkt):
         if DHCP in pkt:
             protocol = 'DHCP'
 
-    dangerous_tcp_ports = [21, 23, 25, 80, 110, 143, 443, 445, 3389]
+    dangerous_tcp_ports = [21, 22, 23, 25, 80, 110, 143, 443, 445, 3389]
     dangerous_udp_ports = [53, 67, 68, 137, 138, 139]
 
     if protocol == 'TCP' and port in dangerous_tcp_ports:
